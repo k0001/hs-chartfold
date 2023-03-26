@@ -1,0 +1,48 @@
+cabal-version: 2.4
+name: chartfold-backend-Chart
+version: 0.1
+license: Apache-2.0
+license-file: LICENSE
+extra-source-files: README.md CHANGELOG.md
+author: Renzo Carbonara
+maintainer: renλren.zone
+copyright: Copyright (c) Renzo Carbonara 2021
+category: Numbers
+build-type: Simple
+synopsis: Chart library backend for the chartfold library.
+synopsis: Chart library backend for the chartfold library.
+homepage: https://github.com/k0001/hs-chartfold
+bug-reports: https://github.com/k0001/hs-chartfold/issues
+tested-with: GHC ==9.4.3
+
+common basic
+  default-language: GHC2021
+  default-extensions:
+    DerivingStrategies
+    DuplicateRecordFields
+    LambdaCase
+    NoFieldSelectors
+    OverloadedRecordDot
+    QuantifiedConstraints
+  ghc-options: -O2 -Wall
+  build-depends:
+    base ==4.*,
+    base-prelude,
+    constraints,
+    containers,
+    chartfold,
+    Chart,
+    data-default-class,
+    lens,
+    text,
+    vector-space,
+  mixins:
+    base hiding (Prelude),
+    base-prelude (BasePrelude as Prelude)
+
+library
+  import: basic
+  hs-source-dirs: lib
+  exposed-modules: Chartfold.Backend.Chart
+  other-modules: Chartfold.Backend.Chart.Orphans
+

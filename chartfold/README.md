@@ -1,0 +1,4 @@
+# chartfold
+
+Haskell streaming charts.
+

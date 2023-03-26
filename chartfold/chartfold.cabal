@@ -1,0 +1,64 @@
+cabal-version: 2.4
+name: chartfold
+version: 0.1
+license: Apache-2.0
+license-file: LICENSE
+extra-source-files: README.md CHANGELOG.md
+author: Renzo Carbonara
+maintainer: renλren.zone
+copyright: Copyright (c) Renzo Carbonara 2021
+category: Numbers
+build-type: Simple
+synopsis: Streaming charts.
+description: Streaming charts.
+homepage: https://github.com/k0001/hs-chartfold
+bug-reports: https://github.com/k0001/hs-chartfold/issues
+tested-with: GHC ==9.4.3
+
+common basic
+  default-language: GHC2021
+  default-extensions:
+    DefaultSignatures
+    DeriveAnyClass
+    DerivingStrategies
+    DuplicateRecordFields
+    FunctionalDependencies
+    LambdaCase
+    NoFieldSelectors
+    OverloadedRecordDot
+    RecordWildCards
+    TypeFamilies
+    QuantifiedConstraints
+  ghc-options: -O2 -Wall
+  build-depends:
+    base ==4.*,
+    base-prelude,
+  mixins:
+    base hiding (Prelude),
+    base-prelude (BasePrelude as Prelude)
+
+library
+  import: basic
+  build-depends:
+    colour,
+    constraints,
+    containers,
+    lens,
+    text,
+    time,
+    vector-space,
+  hs-source-dirs: lib
+  exposed-modules:
+--    Chartfold
+    Chartfold.Candle
+    Chartfold.Constraint
+    Chartfold.Chart
+    Chartfold.Core
+    Chartfold.Fill
+    Chartfold.HLine
+    Chartfold.Line
+    Chartfold.VLine
+    Chartfold.XChart
+    Chartfold.XCharts
+  other-modules:
+    Chartfold.Orphans

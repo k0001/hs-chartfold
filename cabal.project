@@ -1,0 +1,8 @@
+optimization: True
+documentation: True
+profiling: True
+profiling-detail: all-functions
+tests: True
+packages:
+  ./chartfold
+  ./chartfold-backend-Chart
