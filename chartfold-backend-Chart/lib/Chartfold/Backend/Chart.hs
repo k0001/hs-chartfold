@@ -14,82 +14,84 @@ module Chartfold.Backend.Chart
   ) where
 
 import Control.Lens (set, mapped, _1)
+import Data.AffineSpace (AffineSpace(..))
 import Data.Constraint
 import Data.Default.Class (Default(..))
-import Data.AffineSpace (AffineSpace(..))
-import qualified Data.IntMap.Strict as IntMap
+import Data.IntMap.Strict qualified as IntMap
 import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
-import qualified Data.Text as T
-import qualified Graphics.Rendering.Chart.Axis.Types as G
-import qualified Graphics.Rendering.Chart.Backend.Types as G
-import qualified Graphics.Rendering.Chart.Geometry as G
-import qualified Graphics.Rendering.Chart.Layout as G
-import qualified Graphics.Rendering.Chart.Legend as G
-import qualified Graphics.Rendering.Chart.Plot.Candle as G
-import qualified Graphics.Rendering.Chart.Plot.Lines as G
-import qualified Graphics.Rendering.Chart.Plot.FillBetween as G
-import qualified Graphics.Rendering.Chart.Plot.Types as G
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
+import Data.Text qualified as T
+import Graphics.Rendering.Chart.Axis.Types qualified as G
+import Graphics.Rendering.Chart.Backend.Types qualified as G
+import Graphics.Rendering.Chart.Geometry qualified as G
+import Graphics.Rendering.Chart.Layout qualified as G
+import Graphics.Rendering.Chart.Legend qualified as G
+import Graphics.Rendering.Chart.Plot.Candle qualified as G
+import Graphics.Rendering.Chart.Plot.FillBetween qualified as G
+import Graphics.Rendering.Chart.Plot.Lines qualified as G
+import Graphics.Rendering.Chart.Plot.Types qualified as G
 
-import qualified Chartfold.Candle as Candle
-import qualified Chartfold.Chart as Chart
-import qualified Chartfold.Fill as Fill
-import qualified Chartfold.HLine as HLine
-import qualified Chartfold.Line as Line
-import qualified Chartfold.VLine as VLine
-import qualified Chartfold.XChart as XChart
-import qualified Chartfold.XCharts as XCharts
+import Chartfold.Candle (Candle)
+import Chartfold.Candle qualified as Candle
+import Chartfold.Chart (Chart)
+import Chartfold.Chart qualified as Chart
 import Chartfold.Constraint (Entails(..), Entails1)
+import Chartfold.Fill (Fill)
+import Chartfold.Fill qualified as Fill
+import Chartfold.HLine (HLine)
+import Chartfold.HLine qualified as HLine
+import Chartfold.Line (Line)
+import Chartfold.Line qualified as Line
+import Chartfold.VLine (VLine)
+import Chartfold.VLine qualified as VLine
+import Chartfold.XChart (XChart(..))
+import Chartfold.XCharts (XCharts(..))
 
 import Chartfold.Backend.Chart.Orphans ()
 
 --------------------------------------------------------------------------------
 
 -- | As a convenience, if you plan to use 'plotXCharts' or 'plotChart',
--- you can use 'C' as the @c@ parameter of @'XCharts.XCharts' x c@
--- or @'XChart.XChart' x c@.
+-- you can use 'C' as the @c@ parameter of @'XCharts' x c@
+-- or @'XChart' x c@.
 --
 -- Otherwise, define your own class, but be sure to create the corresponding
 -- 'Entails' instances.
 class (Typeable y, Eq y, Show y, G.PlotValue y) => C y
 instance (Typeable y, Eq y, Show y, G.PlotValue y) => C y
 
--- instance C y => Entails (C y) (Typeable y)
--- instance C y => Entails (C y) (Eq y)
--- instance C y => Entails (C y) (Show y)
--- instance C y => Entails (C y) (G.PlotValue y)
-
 --------------------------------------------------------------------------------
 
 plotXCharts
-  :: forall c x
+  :: forall x c
   .  ( G.PlotValue x
      , AffineSpace x
      , Fractional (Diff x)
      , Entails1 c G.PlotValue )
-  => XCharts.XCharts x c
+  => XCharts x c
   -> G.StackedLayouts x
 plotXCharts a = G.StackedLayouts
-  { G._slayouts_layouts = plotXChart <$> IntMap.elems a.charts
+  { G._slayouts_layouts = plotXChart <$> IntMap.elems a.xchart
   , G._slayouts_compress_legend = False
   }
 
 plotXChart
-  :: forall c x
+  :: forall x c
   .  ( G.PlotValue x
      , AffineSpace x
      , Fractional (Diff x)
      , Entails1 c G.PlotValue )
-  => XChart.XChart x c
+  => XChart x c
   -> G.StackedLayout x
-plotXChart xc = XChart.withXChart xc $ \(c :: Chart.Chart x y) ->
-                withDict (entails :: c y :- G.PlotValue y) $
-                G.StackedLayout (plotChart c)
+plotXChart (XChart (c :: Chart x y)) =
+  withDict (entails :: c y :- G.PlotValue y) $
+  G.StackedLayout (plotChart c)
 
 plotChart
-  :: (G.PlotValue x, G.PlotValue y, AffineSpace x, Fractional (Diff x))
-  => Chart.Chart x y -> G.Layout x y
+  :: forall x y
+  .  (G.PlotValue x, G.PlotValue y, AffineSpace x, Fractional (Diff x))
+  => Chart x y -> G.Layout x y
 plotChart a = def
   { G._layout_title = T.unpack a.config.title
   , G._layout_legend = Just $ def
@@ -97,15 +99,15 @@ plotChart a = def
       , G._legend_orientation = G.LORows 1
       }
   , G._layout_plots = mconcat
-      [ plotCandle <$> IntMap.elems a.candles
-      , plotVLine  <$> IntMap.elems a.vLines
-      , plotFill   <$> IntMap.elems a.fills
-      , plotLine   <$> IntMap.elems a.lines
-      , plotHLine  <$> IntMap.elems a.hLines
+      [ plotCandle <$> IntMap.elems a.candle
+      , plotVLine  <$> IntMap.elems a.vline
+      , plotFill   <$> IntMap.elems a.fill
+      , plotLine   <$> IntMap.elems a.line
+      , plotHLine  <$> IntMap.elems a.hline
       ]
   }
 
-plotLine :: forall x y. Line.Line x y -> G.Plot x y
+plotLine :: forall x y. Line x y -> G.Plot x y
 plotLine a =
   let title = T.unpack a.config.title
       m1 :: Map Line.Style [(x, y)]
@@ -119,7 +121,7 @@ plotLine a =
          , G._plot_lines_values = [xys]
          }
 
-plotHLine :: forall x y. HLine.HLine x y -> G.Plot x y
+plotHLine :: forall x y. HLine y -> G.Plot x y
 plotHLine a = case a.info of
   Nothing -> mempty
   Just (ls, y) -> G.toPlot $ def
@@ -129,7 +131,7 @@ plotHLine a = case a.info of
         [[ (G.LMin, G.LValue y), (G.LMax, G.LValue y) ]]
     }
 
-plotVLine :: forall x y. VLine.VLine x y -> G.Plot x y
+plotVLine :: forall x y. VLine x -> G.Plot x y
 plotVLine a =
   let title = T.unpack a.config.title
   in set (G.plot_legend . mapped . _1) title $ mconcat $ do
@@ -142,7 +144,7 @@ plotVLine a =
                    (Set.toAscList sx)
          }
 
-plotFill :: forall x y. Fill.Fill x y -> G.Plot x y
+plotFill :: forall x y. Fill x y -> G.Plot x y
 plotFill a =
   let title = T.unpack a.config.title
   in set (G.plot_legend . mapped . _1) title $ mconcat $ do
@@ -158,7 +160,7 @@ plotFill a =
 
 plotCandle :: forall x y
            .  (AffineSpace x, Fractional (Diff x))
-           => Candle.Candle x y -> G.Plot x y
+           => Candle x y -> G.Plot x y
 plotCandle a =
   let title = T.unpack a.config.title
       m1 :: Map Candle.Style [G.Candle x y]

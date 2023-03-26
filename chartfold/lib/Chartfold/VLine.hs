@@ -1,25 +1,30 @@
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Chartfold.VLine
+module Chartfold.VLine {--}
  ( VLine(..)
- , Config(Config, title)
- , Update(Update, style, x)
- , Err
+ , update
+ , Update(..)
+ , initial
+ , Config(..)
  , Style(..)
- , style
- ) where
+ , styleDefault
+ ) --}
+ where
 
 import Data.AffineSpace (AffineSpace(..))
-import qualified Data.Colour as Co
-import qualified Data.Colour.Names as Co
+import Data.Colour qualified as Co
+import Data.Colour.Names qualified as Co
 import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
+import Data.Map.Strict qualified as Map
+import Data.Sequence (Seq)
 import Data.Set (Set)
-import qualified Data.Set as Set
-import qualified Data.Text as T
+import Data.Set qualified as Set
+import Data.Text qualified as T
 
-import Chartfold.Core
+import Chartfold.Orphans ()
+
+--------------------------------------------------------------------------------
 
 data Style = Style
   { color :: Co.AlphaColour Double
@@ -27,46 +32,49 @@ data Style = Style
   , dashes :: [Double]
   } deriving (Eq, Ord, Show)
 
--- | Default 'Style'.
-style :: Style
-style = Style
+styleDefault :: Style
+styleDefault = Style
   { color = Co.opaque Co.blue
   , width = 1
   , dashes = [1, 3]
   }
 
-data VLine x y = VLine
-  { config :: Config (VLine x y)
+data VLine x = VLine
+  { config :: Config
   , info :: Map Style (Set x)
   } deriving stock (Eq, Ord, Show)
 
-instance (AffineSpace x, Ord x) => Element x (VLine x y) where
-  data Update (VLine x y) = Update
-    { style :: Style
-    , x :: Diff x
-    }
+data Update x = Update
+  { style :: Style
+  , x :: Diff x
+  }
 
-  newtype Config (VLine x y) = Config
-    { title :: T.Text
-    } deriving stock (Eq, Ord, Show)
+{- TODO Is this OK?
+-- | Right-biased.
+instance Semigroup (Update x) where
+  _ <> r = r
+  {-# INLINE (<>) #-}
+-}
 
-  data Err (VLine x y)
-    deriving stock (Eq, Ord, Show)
-    deriving anyclass (Exception)
+deriving stock instance (Eq (Diff x)) => Eq (Update x)
+deriving stock instance (Ord (Diff x)) => Ord (Update x)
+deriving stock instance (Show (Diff x)) => Show (Update x)
 
-  element d = VLine { config = d, info = mempty }
+newtype Config = Config
+  { title :: T.Text
+  } deriving stock (Eq, Ord, Show)
 
-  update x us s = Right $ s
-    { info = foldl' (\m u -> Map.insertWith
-                               mappend
-                               u.style
-                               (Set.singleton $! x .+^ u.x)
-                               m)
-                    s.info
-                    us
-    }
+initial :: Config -> VLine x
+initial d = VLine { config = d, info = mempty }
 
-deriving stock instance Eq (Diff x) => Eq (Update (VLine x y))
-deriving stock instance Ord (Diff x) => Ord (Update (VLine x y))
-deriving stock instance Show (Diff x) => Show (Update (VLine x y))
+update
+  :: forall x
+  .  (AffineSpace x, Ord x)
+  => x
+  -> Seq (Update x) -- ^ Rightmost is recentmost.
+  -> VLine x
+  -> VLine x
+update x us s = s { info = foldl' f s.info us }
+  where f m u = Map.insertWith mappend u.style (Set.singleton $! x .+^ u.x) m
+
 

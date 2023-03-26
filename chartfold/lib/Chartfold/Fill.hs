@@ -1,71 +1,75 @@
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Chartfold.Fill
+module Chartfold.Fill {--}
  ( Fill(..)
- , Config(Config, title)
- , Update(Update, style, x, y)
- , Err
+ , update
+ , Update(..)
+ , initial
+ , Config(..)
  , Style(..)
- , style
- ) where
+ , styleDefault
+ ) --}
+ where
 
 import Data.AffineSpace (AffineSpace(..))
-import qualified Data.Colour as Co
-import qualified Data.Colour.Names as Co
+import Data.Colour qualified as Co
+import Data.Colour.Names qualified as Co
 import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
+import Data.Map.Strict qualified as Map
+import Data.Sequence (Seq)
 import Data.Set (Set)
-import qualified Data.Set as Set
-import qualified Data.Text as T
+import Data.Set qualified as Set
+import Data.Text qualified as T
 
-import Chartfold.Core
+import Chartfold.Orphans ()
+
+--------------------------------------------------------------------------------
 
 data Style = Style
   { color :: Co.AlphaColour Double
   } deriving stock (Eq, Ord, Show)
 
--- | Default 'Style'.
-style :: Style
-style = Style
+styleDefault :: Style
+styleDefault = Style
   { color = Co.withOpacity Co.blue 0.6
   }
 
 data Fill x y = Fill
-  { config :: Config (Fill x y)
+  { config :: Config
   , info   :: Map Style (Map x (Set (y, y)))
   } deriving stock (Eq, Ord, Show)
 
-instance (AffineSpace x, Ord x, Ord y) => Element x (Fill x y) where
-  data instance Update (Fill x y) = Update
-    { style :: Style
-    , x     :: Diff x
-    , y     :: (y, y)
-    }
+data Update x y = Update
+  { style :: Style
+  , x     :: Diff x
+  , y     :: (y, y)
+  }
 
-  newtype instance Config (Fill x y) = Config
+deriving stock instance (Eq (Diff x), Eq y) => Eq (Update x y)
+deriving stock instance (Ord (Diff x), Ord y) => Ord (Update x y)
+deriving stock instance (Show (Diff x), Show y) => Show (Update x y)
+
+newtype Config = Config
     { title :: T.Text
-    } deriving stock (Eq, Ord, Show)
+    } deriving newtype (Eq, Ord)
+      deriving stock (Show)
 
-  data instance Err (Fill x y)
-    deriving stock (Eq, Ord, Show)
-    deriving anyclass (Exception)
+initial :: forall x y. Config -> Fill x y
+initial d = Fill { config = d , info = mempty }
 
-  element d = Fill { config = d , info = mempty }
-
-  update x us s = Right $! s
-    { info = foldl'
-       (\m u -> let !x' = x .+^ u.x
+update
+  :: forall x y
+  .  (AffineSpace x, Ord x, Ord y)
+  => x
+  -> Seq (Update x y) -- ^ Rightmost is recentmost.
+  -> Fill x y
+  -> Fill x y
+update x us s = s { info = foldl' f s.info us }
+  where f m u = let !x' = x .+^ u.x
                     !ys = Set.singleton (uncurry min u.y, uncurry max u.y)
                 in Map.alter (Just . maybe (Map.singleton x' ys)
                                            (Map.insertWith mappend x' ys))
                              u.style
-                             m)
-       s.info
-       us
-    }
-
-deriving stock instance (Eq (Diff x), Eq y) => Eq (Update (Fill x y))
-deriving stock instance (Ord (Diff x), Ord y) => Ord (Update (Fill x y))
-deriving stock instance (Show (Diff x), Show y) => Show (Update (Fill x y))
+                             m
 

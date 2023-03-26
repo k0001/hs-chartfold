@@ -1,155 +1,157 @@
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Chartfold.Chart
+module Chartfold.Chart {--}
  ( Chart(..)
- , Config(Config, title, lines, hLines, vLines, fills, candles)
- , defaultConfig
- , Update(UpdateChartLine,
-          UpdateChartHLine,
-          UpdateChartVLine,
-          UpdateChartFill,
-          UpdateChartCandle)
-  , Err(Err_MissingIdLine,
-        Err_MissingIdHLine,
-        Err_MissingIdVLine,
-        Err_MissingIdFill,
-        Err_MissingIdCandle,
-        Err_Line,
-        Err_HLine,
-        Err_VLine,
-        Err_Fill,
-        Err_Candle)
- ) where
+ , update
+ , Update(..)
+ , initial
+ , Config(..)
+ , configDefault
+ , Err(..)
+ ) --}
+ where
 
 import Data.AffineSpace (AffineSpace(..))
 import Data.IntMap (IntMap)
-import qualified Data.IntMap as IntMap
-import qualified Data.Text as T
-import Prelude hiding (lines)
+import Data.IntMap qualified as IntMap
+import Data.Sequence (Seq)
+import Data.Text qualified as T
 
-import Chartfold.Core
-import qualified Chartfold.Candle as Candle
-import qualified Chartfold.Fill as Fill
-import qualified Chartfold.HLine as HLine
-import qualified Chartfold.Line as Line
-import qualified Chartfold.VLine as VLine
+import Chartfold.Candle (Candle)
+import Chartfold.Candle qualified as Candle
+import Chartfold.Id (Id(..))
+import Chartfold.Fill (Fill)
+import Chartfold.Fill qualified as Fill
+import Chartfold.HLine (HLine)
+import Chartfold.HLine qualified as HLine
+import Chartfold.Line (Line)
+import Chartfold.Line qualified as Line
+import Chartfold.VLine (VLine)
+import Chartfold.VLine qualified as VLine
 
---
+--------------------------------------------------------------------------------
 
 data Chart x y = Chart
-  { config  :: Config (Chart x y)
-  , lines   :: IntMap (Line.Line x y)
-  , hLines  :: IntMap (HLine.HLine x y)
-  , vLines  :: IntMap (VLine.VLine x y)
-  , fills   :: IntMap (Fill.Fill x y)
-  , candles :: IntMap (Candle.Candle x y)
+  { config :: Config x
+  , line   :: IntMap (Line x y)
+  , hline  :: IntMap (HLine y)
+  , vline  :: IntMap (VLine x)
+  , fill   :: IntMap (Fill x y)
+  , candle :: IntMap (Candle x y)
   }
-
-instance (AffineSpace x, Ord x, Ord y) => Element x (Chart x y) where
-  data instance Update (Chart x y)
-    = UpdateChartLine (Id (Line.Line x y)) (Update (Line.Line x y))
-    | UpdateChartHLine (Id (HLine.HLine x y)) (Update (HLine.HLine x y))
-    | UpdateChartVLine (Id (VLine.VLine x y)) (Update (VLine.VLine x y))
-    | UpdateChartFill (Id (Fill.Fill x y)) (Update (Fill.Fill x y))
-    | UpdateChartCandle (Id (Candle.Candle x y)) (Update (Candle.Candle x y))
-
-  data instance Config (Chart x y) = Config
-    { title   :: T.Text
-    , lines   :: IntMap (Config (Line.Line x y))
-    , hLines  :: IntMap (Config (HLine.HLine x y))
-    , vLines  :: IntMap (Config (VLine.VLine x y))
-    , fills   :: IntMap (Config (Fill.Fill x y))
-    , candles :: IntMap (Config (Candle.Candle x y))
-    }
-
-  data instance Err (Chart x y)
-    = Err_MissingIdLine (Id (Line.Line x y))
-    | Err_MissingIdHLine (Id (HLine.HLine x y))
-    | Err_MissingIdVLine (Id (VLine.VLine x y))
-    | Err_MissingIdFill (Id (Fill.Fill x y))
-    | Err_MissingIdCandle (Id (Candle.Candle x y))
-    | Err_Line (Id (Line.Line x y)) (Err (Line.Line x y))
-    | Err_HLine (Id (HLine.HLine x y)) (Err (HLine.HLine x y))
-    | Err_VLine (Id (VLine.VLine x y)) (Err (VLine.VLine x y))
-    | Err_Fill (Id (Fill.Fill x y)) (Err (Fill.Fill x y))
-    | Err_Candle (Id (Candle.Candle x y)) (Err (Candle.Candle x y))
-    deriving stock (Eq, Ord, Show)
-    deriving anyclass (Exception)
-
-  element d = Chart
-    { config  = d
-    , lines   = element <$> d.lines
-    , hLines  = element <$> d.hLines
-    , vLines  = element <$> d.vLines
-    , fills   = element <$> d.fills
-    , candles = element <$> d.candles
-    }
-
-  update = flip . foldlM . flip . update1
-
-update1 :: (AffineSpace x, Ord x, Ord y)
-        => x -> Update (Chart x y) -> Chart x y
-        -> Either (Err (Chart x y)) (Chart x y)
-update1 x u0 s0 = case u0 of
-    UpdateChartLine i a -> do
-      sa' <- mupdate i.un s0.lines $ \case
-        Nothing -> Left $ Err_MissingIdLine i
-        Just sa -> first (Err_Line i) $ update x (pure a) sa
-      pure $ case s0 of Chart{..} -> Chart{lines = sa', ..}
-    UpdateChartHLine i a -> do
-      sa' <- mupdate i.un s0.hLines $ \case
-        Nothing -> Left $ Err_MissingIdHLine i
-        Just sa -> first (Err_HLine i) $ update x (pure a) sa
-      pure $ case s0 of Chart{..} -> Chart{hLines = sa', ..}
-    UpdateChartVLine i a -> do
-      sa' <- mupdate i.un s0.vLines $ \case
-        Nothing -> Left $ Err_MissingIdVLine i
-        Just sa -> first (Err_VLine i) $ update x (pure a) sa
-      pure $ case s0 of Chart{..} -> Chart{vLines = sa', ..}
-    UpdateChartFill i a -> do
-      sa' <- mupdate i.un s0.fills $ \case
-        Nothing -> Left $ Err_MissingIdFill i
-        Just sa -> first (Err_Fill i) $ update x (pure a) sa
-      pure $ case s0 of Chart{..} -> Chart{fills = sa', ..}
-    UpdateChartCandle i a -> do
-      sa' <- mupdate i.un s0.candles $ \case
-        Nothing -> Left $ Err_MissingIdCandle i
-        Just sa -> first (Err_Candle i) $ update x (pure a) sa
-      pure $ case s0 of Chart{..} -> Chart{candles = sa', ..}
-  where
-    mupdate :: forall f v. Functor f
-            => Int -> IntMap v -> (Maybe v -> f v) -> f (IntMap v)
-    mupdate i m f = IntMap.alterF (fmap Just . f) i m
 
 deriving stock instance (Eq (Diff x), Eq x, Eq y) => Eq (Chart x y)
 deriving stock instance (Ord (Diff x), Ord x, Ord y) => Ord (Chart x y)
 deriving stock instance (Show (Diff x), Show x, Show y) => Show (Chart x y)
 
-deriving stock instance (Eq (Diff x), Eq y) => Eq (Update (Chart x y))
-deriving stock instance (Ord (Diff x), Ord y) => Ord (Update (Chart x y))
-deriving stock instance (Show (Diff x), Show y) => Show (Update (Chart x y))
+data Update x y
+  = Update_Line (Id (Line.Line x y)) (Line.Update y)
+  | Update_HLine (Id (HLine.HLine y)) (HLine.Update y)
+  | Update_VLine (Id (VLine.VLine x)) (VLine.Update x)
+  | Update_Fill (Id (Fill.Fill x y)) (Fill.Update x y)
+  | Update_Candle (Id (Candle.Candle x y)) (Candle.Update x y)
 
-deriving stock instance Eq (Diff x) => Eq (Config (Chart x y))
-deriving stock instance Ord (Diff x) => Ord (Config (Chart x y))
-deriving stock instance Show (Diff x) => Show (Config (Chart x y))
+deriving stock instance (Eq (Diff x), Eq y) => Eq (Update x y)
+deriving stock instance (Ord (Diff x), Ord y) => Ord (Update x y)
+deriving stock instance (Show (Diff x), Show y) => Show (Update x y)
 
+data Config x = Config
+  { title  :: T.Text
+  , line   :: IntMap (Line.Config x)
+  , hline  :: IntMap HLine.Config
+  , vline  :: IntMap VLine.Config
+  , fill   :: IntMap Fill.Config
+  , candle :: IntMap Candle.Config
+  }
+
+deriving stock instance Eq (Diff x) => Eq (Config x)
+deriving stock instance Ord (Diff x) => Ord (Config x)
+deriving stock instance Show (Diff x) => Show (Config x)
+
+configDefault :: T.Text -> Config x
+configDefault title = Config
+  { title  = title
+  , line   = mempty
+  , hline  = mempty
+  , vline  = mempty
+  , fill   = mempty
+  , candle = mempty
+  }
+
+data Err x y
+  = Err_MissingLine (Id (Line x y))
+  | Err_MissingHLine (Id (HLine y))
+  | Err_MissingVLine (Id (VLine x))
+  | Err_MissingFill (Id (Fill x y))
+  | Err_MissingCandle (Id (Candle x y))
+  | Err_Candle (Id (Candle x y)) (Candle.Err x y)
+  deriving stock (Eq, Ord, Show)
+  deriving anyclass (Exception)
+
+initial :: forall x y. (Ord x) => Config x -> Chart x y
+initial d = Chart
+  { config  = d
+  , line   = Line.initial   <$> d.line
+  , hline  = HLine.initial  <$> d.hline
+  , vline  = VLine.initial  <$> d.vline
+  , fill   = Fill.initial   <$> d.fill
+  , candle = Candle.initial <$> d.candle
+  }
+
+update
+  :: (AffineSpace x, Ord x, Ord y)
+  => x
+  -> Seq (Update x y)
+  -> Chart x y
+  -> Either (Err x y) (Chart x y)
+update = flip . foldlM . flip . update1
+
+update1
+  :: (AffineSpace x, Ord x, Ord y)
+  => x
+  -> Update x y
+  -> Chart x y
+  -> Either (Err x y) (Chart x y)
+update1 x u0 s0 = case u0 of
+    Update_Line i a -> do
+      sa' <- mupdate i.un s0.line $ \case
+        Nothing -> Left $ Err_MissingLine i
+        Just sa -> pure $ Line.update x (pure a) sa
+      pure $ case s0 of Chart{..} -> Chart{line=sa', ..}
+    Update_HLine i a -> do
+      sa' <- mupdate i.un s0.hline $ \case
+        Nothing -> Left $ Err_MissingHLine i
+        Just sa -> pure $ HLine.update (pure a) sa
+      pure $ case s0 of Chart{..} -> Chart{hline=sa', ..}
+    Update_VLine i a -> do
+      sa' <- mupdate i.un s0.vline $ \case
+        Nothing -> Left $ Err_MissingVLine i
+        Just sa -> pure $ VLine.update x (pure a) sa
+      pure $ case s0 of Chart{..} -> Chart{vline=sa', ..}
+    Update_Fill i a -> do
+      sa' <- mupdate i.un s0.fill $ \case
+        Nothing -> Left $ Err_MissingFill i
+        Just sa -> pure $ Fill.update x (pure a) sa
+      pure $ case s0 of Chart{..} -> Chart{fill=sa', ..}
+    Update_Candle i a -> do
+      sa' <- mupdate i.un s0.candle $ \case
+        Nothing -> Left $ Err_MissingCandle i
+        Just sa -> first (Err_Candle i) $ Candle.update x (pure a) sa
+      pure $ case s0 of Chart{..} -> Chart{candle=sa', ..}
+  where
+    mupdate :: forall f v. Functor f
+            => Int -> IntMap v -> (Maybe v -> f v) -> f (IntMap v)
+    mupdate i m f = IntMap.alterF (fmap Just . f) i m
+
+{- What is this for?
 instance (AffineSpace x, Ord x, Ord y)
   => ConfigAdd x (Chart x y) (Line.Line x y) where
   configAdd cb ca =
-    let m  = ca.lines
+    let m  = ca.line
         i  = maybe 0 (succ . fst) $ IntMap.lookupMax m
         m' = IntMap.insert i cb m
-        f  = \x ub a -> update x (UpdateChartLine (Id i) <$> ub) a
-    in (f, case ca of Config{..} -> Config{lines = m', ..})
-
-defaultConfig :: T.Text -> Config (Chart x y)
-defaultConfig title = Config
-  { title   = title
-  , lines   = mempty
-  , hLines  = mempty
-  , vLines  = mempty
-  , fills   = mempty
-  , candles = mempty
-  }
+        f  = \x ub a -> update x (Update_Line (Id i) <$> ub) a
+    in (f, case ca of Config{..} -> Config{line = m', ..})
+-}
 

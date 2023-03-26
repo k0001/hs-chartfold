@@ -1,28 +1,30 @@
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Chartfold.Line
+module Chartfold.Line {--}
  ( Line(..)
- , Config(Config, title)
- , Update(Update, style, y)
- , Err
+ , update
+ , Update(..)
+ , initial
+ , Config(..)
  , Style(..)
- , style
+ , styleDefault
  , StyleCap(..)
- , styleCap
+ , styleCapDefault
  , StyleJoin(..)
- , styleJoin
- ) where
+ , styleJoinDefault
+ ) --}
+ where
 
 import Data.AffineSpace (AffineSpace(..))
-import qualified Data.Colour as Co
-import qualified Data.Colour.Names as Co
+import Data.Colour qualified as Co
+import Data.Colour.Names qualified as Co
 import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
-import qualified Data.Sequence as Seq
-import qualified Data.Text as T
+import Data.Map.Strict qualified as Map
+import Data.Sequence (Seq(..))
+import Data.Text qualified as T
 
-import Chartfold.Core
+import Chartfold.Orphans ()
 
 --
 
@@ -34,14 +36,13 @@ data Style = Style
   , join   :: StyleJoin
   } deriving (Eq, Ord, Show)
 
--- | Default 'Style'.
-style :: Style
-style = Style
+styleDefault :: Style
+styleDefault = Style
   { color  = Co.opaque Co.purple
   , width  = 1
   , dashes = []
-  , cap    = styleCap
-  , join   = styleJoin
+  , cap    = styleCapDefault
+  , join   = styleJoinDefault
   }
 
 data StyleCap
@@ -50,9 +51,8 @@ data StyleCap
   | StyleCapSquare -- ^ Make a square that ends the line.
   deriving (Eq, Ord, Show)
 
--- | Default 'StyleCap'.
-styleCap :: StyleCap
-styleCap = StyleCapButt
+styleCapDefault :: StyleCap
+styleCapDefault = StyleCapButt
 
 data StyleJoin
   = StyleJoinMiter -- ^ Extends the outlines until they meet each other.
@@ -61,14 +61,13 @@ data StyleJoin
                    --   treshold is exceeded.
   deriving (Eq, Ord, Show)
 
--- | Default 'StyleJoin'.
-styleJoin :: StyleJoin
-styleJoin = StyleJoinBevel
+styleJoinDefault :: StyleJoin
+styleJoinDefault = StyleJoinBevel
 
 --
 
 data Line x y = Line
-  { config :: Config (Line x y)
+  { config :: Config x
   , info :: Map x (Style, y)
     -- ^ We only keep the most recently set `y`.
   }
@@ -77,33 +76,36 @@ deriving stock instance (Eq (Diff x), Eq x,  Eq y) => Eq (Line x y)
 deriving stock instance (Ord (Diff x), Ord x,  Ord y) => Ord (Line x y)
 deriving stock instance (Show (Diff x), Show x, Show y) => Show (Line x y)
 
-instance (AffineSpace x, Ord x) => Element x (Line x y) where
-  data instance Update (Line x y) = Update
-    { style :: Style
-    , y     :: y
-    } deriving stock (Eq, Ord, Show)
+data Update y = Update
+  { style :: Style
+  , y     :: y
+  } deriving stock (Eq, Ord, Show)
 
-  data instance Config (Line x y) = Config
-    { title :: T.Text
-    , x     :: Diff x
-    }
-
-  data instance Err (Line x y)
-    deriving stock (Eq, Ord, Show)
-    deriving anyclass (Exception)
-
-  element d = Line { config = d , info = mempty }
-
-  update x us s = case us of
-    Seq.Empty -> Right s
-    _ Seq.:|> u -> Right $! s
-       { info = Map.insert (x .+^ s.config.x) (u.style, u.y) s.info }
-
-deriving stock instance Eq (Diff x) => Eq (Config (Line x y))
-deriving stock instance Ord (Diff x) => Ord (Config (Line x y))
-deriving stock instance Show (Diff x) => Show (Config (Line x y))
-
--- | Right-biased.
-instance Semigroup (Update (Line x y)) where
+-- | @old '<>' new@
+instance Semigroup (Update y) where
   _ <> r = r
   {-# INLINE (<>) #-}
+
+data Config x = Config
+  { title :: T.Text
+  , x     :: Diff x -- What is this for? Can we get rid of this field?
+  }
+
+deriving stock instance Eq (Diff x) => Eq (Config x)
+deriving stock instance Ord (Diff x) => Ord (Config x)
+deriving stock instance Show (Diff x) => Show (Config x)
+
+initial :: forall x y. Ord x => Config x -> Line x y
+initial d = Line { config = d, info = mempty }
+
+update
+  :: forall x y
+  .  (AffineSpace x, Ord x)
+  => x
+  -> Seq (Update y)
+  -> Line x y
+  -> Line x y
+update x us s = case us of
+  _ :|> u -> s { info = Map.insert (x .+^ s.config.x) (u.style, u.y) s.info }
+  _       -> s
+

@@ -8,9 +8,13 @@ module Chartfold.Constraint
 
 import Data.Constraint
 
+-- Unrelated import just so that downstream gets orphans from this module too.
+import Chartfold.Orphans ()
+
+--------------------------------------------------------------------------------
+
 type Entails1 (a :: k -> Constraint) (b :: k -> Constraint) =
   forall (x :: k). Entails (a x) (b x)
-
 
 -- | @a ':-' b@, as a 'Constraint'.
 class Entails (a :: Constraint) (b :: Constraint) where

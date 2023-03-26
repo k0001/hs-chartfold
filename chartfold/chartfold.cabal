@@ -51,11 +51,11 @@ library
   exposed-modules:
 --    Chartfold
     Chartfold.Candle
-    Chartfold.Constraint
     Chartfold.Chart
-    Chartfold.Core
+    Chartfold.Constraint
     Chartfold.Fill
     Chartfold.HLine
+    Chartfold.Id
     Chartfold.Line
     Chartfold.VLine
     Chartfold.XChart
