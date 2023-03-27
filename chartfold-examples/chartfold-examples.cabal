@@ -1,0 +1,51 @@
+cabal-version: 2.4
+name: chartfold-examples
+version: 0.1
+license: CC0-1.0
+license-file: LICENSE
+extra-source-files: README.md CHANGELOG.md
+author: Renzo Carbonara
+maintainer: renλren.zone
+copyright: Copyright (c) Renzo Carbonara 2023
+category: Numbers
+build-type: Simple
+synopsis: Examples of using the chartfold library.
+description: Examples of using the chartfold library.
+homepage: https://github.com/k0001/hs-chartfold
+bug-reports: https://github.com/k0001/hs-chartfold/issues
+tested-with: GHC ==9.4.3
+
+common basic
+  default-language: GHC2021
+  ghc-options: -O2 -Wall
+  build-depends:
+    base ==4.*,
+    base-prelude,
+    chartfold,
+    Chart,
+  mixins:
+    base hiding (Prelude),
+    base-prelude (BasePrelude as Prelude)
+
+library
+  import: basic
+  hs-source-dirs: lib
+  build-depends:
+    Chart,
+    Chart-diagrams,
+    chartfold,
+    diagrams-canvas,
+    diagrams-lib,
+  exposed-modules:
+    Chartfold.Examples.One
+
+executable chartfold-examples
+  import: basic
+  hs-source-dirs: exe
+  main-is: Main.hs
+  ghc-options: -threaded
+  build-depends:
+    chartfold-examples,
+    diagrams-canvas,
+    diagrams-lib,
+

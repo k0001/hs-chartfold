@@ -5,4 +5,5 @@ profiling-detail: all-functions
 tests: True
 packages:
   ./chartfold
+  ./chartfold-examples
   ./chartfold-backend-Chart
