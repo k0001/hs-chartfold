@@ -1,5 +1,5 @@
 { mkDerivation, base, base-prelude, colour, constraints, containers
-, lens, lib, text, time, vector-space
+, lens, lib, text, time, vector-space, mtl-prelude
 }:
 mkDerivation {
   pname = "chartfold";
@@ -7,7 +7,7 @@ mkDerivation {
   src = lib.sources.cleanSource ./.;
   libraryHaskellDepends = [
     base base-prelude colour constraints containers lens text time
-    vector-space
+    vector-space mtl-prelude
   ];
   homepage = "https://github.com/k0001/hs-chartfold";
   description = "Streaming charts";

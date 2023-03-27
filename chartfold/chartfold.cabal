@@ -33,6 +33,7 @@ common basic
   build-depends:
     base ==4.*,
     base-prelude,
+    mtl-prelude,
   mixins:
     base hiding (Prelude),
     base-prelude (BasePrelude as Prelude)

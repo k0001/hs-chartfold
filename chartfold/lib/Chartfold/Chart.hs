@@ -1,6 +1,9 @@
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+-- For record updates
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+
 module Chartfold.Chart {--}
  ( Chart(..)
  , update
@@ -8,6 +11,11 @@ module Chartfold.Chart {--}
  , initial
  , Config(..)
  , configDefault
+ , candle
+ , fill
+ , hline
+ , line
+ , vline
  , Err(..)
  ) --}
  where
@@ -17,6 +25,7 @@ import Data.IntMap (IntMap)
 import Data.IntMap qualified as IntMap
 import Data.Sequence (Seq)
 import Data.Text qualified as T
+import MTLPrelude
 
 import Chartfold.Candle (Candle)
 import Chartfold.Candle qualified as Candle
@@ -144,14 +153,65 @@ update1 x u0 s0 = case u0 of
             => Int -> IntMap v -> (Maybe v -> f v) -> f (IntMap v)
     mupdate i m f = IntMap.alterF (fmap Just . f) i m
 
-{- What is this for?
-instance (AffineSpace x, Ord x, Ord y)
-  => ConfigAdd x (Chart x y) (Line.Line x y) where
-  configAdd cb ca =
-    let m  = ca.line
-        i  = maybe 0 (succ . fst) $ IntMap.lookupMax m
-        m' = IntMap.insert i cb m
-        f  = \x ub a -> update x (Update_Line (Id i) <$> ub) a
-    in (f, case ca of Config{..} -> Config{line = m', ..})
--}
+--------------------------------------------------------------------------------
+
+line
+  :: forall x y m
+  .  (MonadState (Config x) m, AffineSpace x, Ord x, Ord y)
+  => Line.Config x
+  -> m (Seq (Line.Update y) -> Seq (Update x y))
+line c = state $ \cc ->
+  let i = maybe 0 (succ . fst) $ IntMap.lookupMax cc.line
+      m = IntMap.insert i c cc.line
+  in ( fmap (Update_Line (Id i))
+     , case cc of Config{..} -> Config{line=m, ..}
+     )
+
+vline
+  :: forall x y m
+  .  (MonadState (Config x) m)
+  => VLine.Config
+  -> m (Seq (VLine.Update x) -> Seq (Update x y))
+vline c = state $ \cc ->
+  let i = maybe 0 (succ . fst) $ IntMap.lookupMax cc.vline
+      m = IntMap.insert i c cc.vline
+  in ( fmap (Update_VLine (Id i))
+     , case cc of Config{..} -> Config{vline=m, ..}
+     )
+
+hline
+  :: forall x y m
+  .  (MonadState (Config x) m)
+  => HLine.Config
+  -> m (Seq (HLine.Update y) -> Seq (Update x y))
+hline c = state $ \cc ->
+  let i = maybe 0 (succ . fst) $ IntMap.lookupMax cc.hline
+      m = IntMap.insert i c cc.hline
+  in ( fmap (Update_HLine (Id i))
+     , case cc of Config{..} -> Config{hline=m, ..}
+     )
+
+fill
+  :: forall x y m
+  .  (MonadState (Config x) m)
+  => Fill.Config
+  -> m (Seq (Fill.Update x y) -> Seq (Update x y))
+fill c = state $ \cc ->
+  let i = maybe 0 (succ . fst) $ IntMap.lookupMax cc.fill
+      m = IntMap.insert i c cc.fill
+  in ( fmap (Update_Fill (Id i))
+     , case cc of Config{..} -> Config{fill=m, ..}
+     )
+
+candle
+  :: forall x y m
+  .  (MonadState (Config x) m)
+  => Candle.Config
+  -> m (Seq (Candle.Update x y) -> Seq (Update x y))
+candle c = state $ \cc ->
+  let i = maybe 0 (succ . fst) $ IntMap.lookupMax cc.candle
+      m = IntMap.insert i c cc.candle
+  in ( fmap (Update_Candle (Id i))
+     , case cc of Config{..} -> Config{candle=m, ..}
+     )
 
