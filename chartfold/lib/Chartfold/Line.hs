@@ -88,7 +88,9 @@ instance Semigroup (Update y) where
 
 data Config x = Config
   { title :: T.Text
-  , x     :: Diff x -- What is this for? Can we get rid of this field?
+  , x     :: Diff x -- ^ This is an offset so that the line is not rendered at @x@,
+                    -- but at @x - 'Config'.x@. Do we need this? Hopefully not, and we
+                    -- can remove it.
   }
 
 deriving stock instance Eq (Diff x) => Eq (Config x)

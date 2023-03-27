@@ -13,6 +13,10 @@
         let
           lib = prev.lib;
           hs = prev.haskell;
+          hsAddPropagatePkgconfigDepends = d: xs:
+            (hs.lib.addPkgconfigDepends d xs).overrideAttrs (old: {
+              propagatedBuildInputs = xs ++ (old.propagatedBuildInputs or [ ]);
+            });
         in {
           haskell = prev.haskell // {
             packageOverrides =
@@ -26,59 +30,22 @@
 
                 # External
                 Chart = hs.lib.doJailbreak hsuper.Chart;
-                Chart-diagrams = hs.lib.doJailbreak hsuper.Chart-diagrams;
-                # gi-cairo = hs.lib.addPkgconfigDepends hsuper.gi-cairo [
-                #   final.pcre2
-                #   final.xorg.libXdmcp
-                # ];
-                # gi-cairo-render =
-                #   hs.lib.addPkgconfigDepends hsuper.gi-cairo-render [
-                #     final.pcre2
-                #     final.xorg.libXdmcp
-                #   ];
-                # gi-gio = hs.lib.addPkgconfigDepends hsuper.gi-gio [
-                #   final.libselinux
-                #   final.libsepol
-                #   final.pcre
-                #   final.pcre2
-                #   final.util-linuxMinimal # provides lib 'mount'
-                # ];
-                # gi-glib =
-                #   hs.lib.addPkgconfigDepends hsuper.gi-glib [ final.pcre2 ];
-                # gi-gobject =
-                #   hs.lib.addPkgconfigDepend hsuper.gi-gobject final.pcre2;
-                # gi-harfbuzz = hs.lib.addPkgconfigDepends hsuper.gi-harfbuzz [
-                #   final.freetype
-                #   final.pcre2
-                # ];
-                # gi-pango = hs.lib.addPkgconfigDepends hsuper.gi-pango [
-                #   final.fribidi
-                #   final.libdatrie
-                #   final.libselinux
-                #   final.libsepol
-                #   final.libthai
-                #   final.pcre
-                #   final.pcre2
-                #   final.util-linuxMinimal # provides lib 'mount'
-                #   final.xorg.libXdmcp
-                # ];
-                # gi-pangocairo =
-                #   hs.lib.addPkgconfigDepends hsuper.gi-pangocairo [
-                #     final.fribidi
-                #     final.libdatrie
-                #     final.libselinux
-                #     final.libsepol
-                #     final.libthai
-                #     final.pcre
-                #     final.pcre2
-                #     final.util-linuxMinimal # provides lib 'mount'
-                #     final.xorg.libXdmcp
-                #   ];
-                # haskell-gi =
-                #   hs.lib.addPkgconfigDepends hsuper.haskell-gi [ final.pcre2 ];
-                # haskell-gi-base =
-                #   hs.lib.addPkgconfigDepends hsuper.haskell-gi-base
-                #   [ final.pcre2 ];
+                Chart-cairo = hs.lib.doJailbreak hsuper.Chart-cairo;
+                gtk = hsAddPropagatePkgconfigDepends
+                  (hs.lib.doJailbreak hsuper.gtk) [
+                    final.fribidi
+                    final.libdatrie
+                    final.libdeflate
+                    final.libthai
+                    final.xorg.libXdmcp
+                  ];
+                gio = hsAddPropagatePkgconfigDepends hsuper.gio [
+                  final.libselinux
+                  final.libsepol
+                  final.pcre
+                  final.pcre2
+                  final.util-linuxMinimal # provides libmount
+                ];
               });
           };
         };
@@ -105,6 +72,8 @@
             ];
           };
           chartfold__ghc943 = pkgs.haskell.packages.ghc943.chartfold;
+          chartfold-examples__ghc943 =
+            pkgs.haskell.packages.ghc943.chartfold-examples;
           chartfold-backend-Chart__ghc943 =
             pkgs.haskell.packages.ghc943.chartfold-backend-Chart;
         };

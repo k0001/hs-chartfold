@@ -91,7 +91,8 @@ plotXChart (XChart (c :: Chart x y)) =
 plotChart
   :: forall x y
   .  (G.PlotValue x, G.PlotValue y, AffineSpace x, Fractional (Diff x))
-  => Chart x y -> G.Layout x y
+  => Chart x y
+  -> G.Layout x y
 plotChart a = def
   { G._layout_title = T.unpack a.config.title
   , G._layout_legend = Just $ def

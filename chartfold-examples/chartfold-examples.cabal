@@ -19,19 +19,17 @@ common basic
   default-language: GHC2021
   default-extensions:
     DuplicateRecordFields
+    LambdaCase
     NoFieldSelectors
-    OverloadedRecordDot
     OverloadedLists
+    OverloadedRecordDot
     OverloadedStrings
     PartialTypeSignatures
   ghc-options: -O2 -Wall
   build-depends:
     base ==4.*,
     base-prelude,
-    blank-canvas,
     chartfold,
-    chartfold-backend-Chart,
-    Chart,
     mtl-prelude,
   mixins:
     base hiding (Prelude),
@@ -43,10 +41,10 @@ executable chartfold-examples-clock
   main-is: clock.hs
   ghc-options: -threaded -rtsopts
   build-depends:
+    chartfold-backend-Chart,
     Chart,
-    Chart-diagrams,
-    chartfold,
+    Chart-cairo,
     containers,
-    diagrams-canvas,
-    diagrams-lib,
+    gtk,
     time,
+    stm,
