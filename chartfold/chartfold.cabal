@@ -18,6 +18,7 @@ tested-with: GHC ==9.4.3
 common basic
   default-language: GHC2021
   default-extensions:
+    DataKinds
     DefaultSignatures
     DeriveAnyClass
     DerivingStrategies
@@ -25,8 +26,11 @@ common basic
     FunctionalDependencies
     LambdaCase
     NoFieldSelectors
+    OverloadedLists
     OverloadedRecordDot
+    PatternSynonyms
     RecordWildCards
+    RoleAnnotations
     TypeFamilies
     QuantifiedConstraints
   ghc-options: -O2 -Wall
@@ -54,12 +58,14 @@ library
     Chartfold.Candle
     Chartfold.Chart
     Chartfold.Constraint
+    Chartfold.Extra
     Chartfold.Fill
     Chartfold.HLine
-    Chartfold.Id
     Chartfold.Line
     Chartfold.VLine
     Chartfold.XChart
-    Chartfold.XCharts
+--    Chartfold.XCharts
   other-modules:
     Chartfold.Orphans
+    -- remove this:
+    Chartfold.Id

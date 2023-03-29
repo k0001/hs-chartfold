@@ -23,6 +23,7 @@ common basic
     LambdaCase
     NoFieldSelectors
     OverloadedRecordDot
+    PatternSynonyms
     QuantifiedConstraints
   ghc-options: -O2 -Wall
   build-depends:

@@ -2,11 +2,17 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Chartfold.Line {--}
- ( Line(..)
- , update
- , Update(..)
+ ( -- * Line
+   Line(config, points)
  , initial
+ , update
+   -- * Update
+ , Update
+ , set
+ , del
+   -- * Hide
  , Config(..)
+ , configDefault
  , Style(..)
  , styleDefault
  , StyleCap(..)
@@ -16,17 +22,17 @@ module Chartfold.Line {--}
  ) --}
  where
 
-import Data.AffineSpace (AffineSpace(..))
+import Data.AdditiveGroup
+import Data.AffineSpace
 import Data.Colour qualified as Co
 import Data.Colour.Names qualified as Co
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-import Data.Sequence (Seq(..))
 import Data.Text qualified as T
 
 import Chartfold.Orphans ()
 
---
+--------------------------------------------------------------------------------
 
 data Style = Style
   { color  :: Co.AlphaColour Double
@@ -64,50 +70,58 @@ data StyleJoin
 styleJoinDefault :: StyleJoin
 styleJoinDefault = StyleJoinBevel
 
---
-
-data Line x y = Line
-  { config :: Config x
-  , info :: Map x (Style, y)
-    -- ^ We only keep the most recently set `y`.
-  }
-
-deriving stock instance (Eq (Diff x), Eq x,  Eq y) => Eq (Line x y)
-deriving stock instance (Ord (Diff x), Ord x,  Ord y) => Ord (Line x y)
-deriving stock instance (Show (Diff x), Show x, Show y) => Show (Line x y)
-
-data Update y = Update
-  { style :: Style
-  , y     :: y
-  } deriving stock (Eq, Ord, Show)
-
--- | @old '<>' new@
-instance Semigroup (Update y) where
-  _ <> r = r
-  {-# INLINE (<>) #-}
+--------------------------------------------------------------------------------
 
 data Config x = Config
   { title :: T.Text
-  , x     :: Diff x -- ^ This is an offset so that the line is not rendered at @x@,
-                    -- but at @x - 'Config'.x@. Do we need this? Hopefully not, and we
-                    -- can remove it.
+  , xoff  :: Diff x
   }
 
-deriving stock instance Eq (Diff x) => Eq (Config x)
-deriving stock instance Ord (Diff x) => Ord (Config x)
-deriving stock instance Show (Diff x) => Show (Config x)
+deriving stock instance (Eq (Diff x)) => Eq (Config x)
+deriving stock instance (Ord (Diff x)) => Ord (Config x)
+deriving stock instance (Show (Diff x)) => Show (Config x)
 
-initial :: forall x y. Ord x => Config x -> Line x y
-initial d = Line { config = d, info = mempty }
+configDefault :: AdditiveGroup (Diff x) => T.Text -> Config x
+configDefault title = Config{title, xoff=zeroV}
 
-update
-  :: forall x y
-  .  (AffineSpace x, Ord x)
-  => x
-  -> Seq (Update y)
-  -> Line x y
-  -> Line x y
-update x us s = case us of
-  _ :|> u -> s { info = Map.insert (x .+^ s.config.x) (u.style, u.y) s.info }
-  _       -> s
+--------------------------------------------------------------------------------
+
+data Line x y = Line
+  { config :: Config x
+  , points :: Map x (Style, y)
+  }
+
+deriving stock instance (Eq (Diff x), Eq x, Eq y) => Eq (Line x y)
+deriving stock instance (Ord (Diff x), Ord x, Ord y) => Ord (Line x y)
+deriving stock instance (Show (Diff x), Show x, Show y) => Show (Line x y)
+
+initial :: forall x y. Config x -> Line x y
+initial c = Line c Map.empty
+
+update :: forall x y. Ord x => Update x y -> Line x y -> Line x y
+update (Update m) (Line c p) = Line c (Map.mapMaybe id (m <> Map.map Just p))
+{-# INLINE update #-}
+
+--------------------------------------------------------------------------------
+
+newtype Update x y = Update (Map x (Maybe (Style, y)))
+
+-- | @old '<>' new@ is biased towards @new@.
+instance Ord x => Semigroup (Update x y) where
+  Update l <> Update r = Update (r <> l)
+
+instance Ord x => Monoid (Update x y) where
+  mempty = Update mempty
+
+deriving stock instance (Eq x, Eq y) => Eq (Update x y)
+deriving stock instance (Ord x, Ord y) => Ord (Update x y)
+deriving stock instance (Show x, Show y) => Show (Update x y)
+
+-- | @'set' s x y@ sets to @y@ the line point at @x@, using style @s@.
+set :: forall x y. Style -> x -> y -> Update x y
+set s x y = Update (Map.singleton x (Just (s, y)))
+
+-- | @'del' x@ deletes the line point at @x@.
+del :: forall x y. x -> Update x y
+del x = Update (Map.singleton x Nothing)
 

@@ -34,7 +34,7 @@ data XChartLR x cl cr = XChartLR (XChart x cl) (XChart x cr)
 
 -- | Multiple 'Chart.Chart's having the same @x@ axis, but potentially
 -- different @y@ axis satisfying @c y@.,
-data XCharts (x :: Type) (c :: Type -> Constraint)= XCharts
+data XCharts (x :: Type) (c :: Type -> Constraint) = XCharts
   { xchart :: IntMap (XChart x c)
   }
 

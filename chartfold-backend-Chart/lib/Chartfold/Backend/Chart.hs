@@ -3,7 +3,7 @@
 
 module Chartfold.Backend.Chart
   ( C
-  , plotXCharts
+  -- , plotXCharts
   , plotXChart
   , plotChart
   , plotLine
@@ -20,6 +20,7 @@ import Data.Default.Class (Default(..))
 import Data.IntMap.Strict qualified as IntMap
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text qualified as T
 import Graphics.Rendering.Chart.Axis.Types qualified as G
@@ -37,6 +38,7 @@ import Chartfold.Candle qualified as Candle
 import Chartfold.Chart (Chart)
 import Chartfold.Chart qualified as Chart
 import Chartfold.Constraint (Entails(..), Entails1)
+import Chartfold.Extra (Interval, OHLC)
 import Chartfold.Fill (Fill)
 import Chartfold.Fill qualified as Fill
 import Chartfold.HLine (HLine)
@@ -45,8 +47,8 @@ import Chartfold.Line (Line)
 import Chartfold.Line qualified as Line
 import Chartfold.VLine (VLine)
 import Chartfold.VLine qualified as VLine
-import Chartfold.XChart (XChart(..))
-import Chartfold.XCharts (XCharts(..))
+import Chartfold.XChart (XChart, pattern XChart)
+-- import Chartfold.XCharts (XCharts(..))
 
 import Chartfold.Backend.Chart.Orphans ()
 
@@ -63,35 +65,35 @@ instance (Typeable y, Eq y, Show y, G.PlotValue y) => C y
 
 --------------------------------------------------------------------------------
 
-plotXCharts
-  :: forall x c
-  .  ( G.PlotValue x
-     , AffineSpace x
-     , Fractional (Diff x)
-     , Entails1 c G.PlotValue )
-  => XCharts x c
-  -> G.StackedLayouts x
-plotXCharts a = G.StackedLayouts
-  { G._slayouts_layouts = plotXChart <$> IntMap.elems a.xchart
-  , G._slayouts_compress_legend = False
-  }
-
+-- plotXCharts
+--   :: forall x c
+--   .  ( G.PlotValue x
+--      , AffineSpace x
+--      , Fractional (Diff x)
+--      , Entails1 c G.PlotValue )
+--   => XCharts x c
+--   -> G.StackedLayouts x
+-- plotXCharts a = G.StackedLayouts
+--   { G._slayouts_layouts = plotXChart <$> IntMap.elems a.xchart
+--   , G._slayouts_compress_legend = False
+--   }
+--
 plotXChart
-  :: forall x c
+  :: forall s x c
   .  ( G.PlotValue x
      , AffineSpace x
      , Fractional (Diff x)
      , Entails1 c G.PlotValue )
-  => XChart x c
+  => XChart s x c
   -> G.StackedLayout x
-plotXChart (XChart (c :: Chart x y)) =
+plotXChart (XChart (c :: Chart s' x y)) =
   withDict (entails :: c y :- G.PlotValue y) $
   G.StackedLayout (plotChart c)
 
 plotChart
-  :: forall x y
+  :: forall s x y
   .  (G.PlotValue x, G.PlotValue y, AffineSpace x, Fractional (Diff x))
-  => Chart x y
+  => Chart s x y
   -> G.Layout x y
 plotChart a = def
   { G._layout_title = T.unpack a.config.title
@@ -100,20 +102,22 @@ plotChart a = def
       , G._legend_orientation = G.LORows 1
       }
   , G._layout_plots = mconcat
-      [ plotCandle <$> IntMap.elems a.candle
-      , plotVLine  <$> IntMap.elems a.vline
-      , plotFill   <$> IntMap.elems a.fill
-      , plotLine   <$> IntMap.elems a.line
-      , plotHLine  <$> IntMap.elems a.hline
+      [ plotCandle <$> a.candle
+      , plotVLine  <$> a.vline
+      , plotFill   <$> a.fill
+      , plotLine   <$> a.line
+      , plotHLine  <$> a.hline
       ]
   }
 
-plotLine :: forall x y. Line x y -> G.Plot x y
+plotLine :: forall x y. AffineSpace x => Line x y -> G.Plot x y
 plotLine a =
   let title = T.unpack a.config.title
       m1 :: Map Line.Style [(x, y)]
-      m1 = Map.foldrWithKey (\x (ls, y) -> Map.insertWith mappend ls [(x, y)])
-                            mempty a.info
+      m1 = Map.foldrWithKey (\x (ls, y) ->
+                                let x' = x .+^ a.config.xoff
+                                in  Map.insertWith mappend ls [(x', y)])
+                            mempty a.points
   in set (G.plot_legend . mapped . _1) title $ mconcat $ do
        (ls, xys) <- Map.toAscList m1
        pure $ G.toPlot $ def
@@ -123,40 +127,47 @@ plotLine a =
          }
 
 plotHLine :: forall x y. HLine y -> G.Plot x y
-plotHLine a = case a.info of
-  Nothing -> mempty
-  Just (ls, y) -> G.toPlot $ def
-    { G._plot_lines_title = T.unpack a.config.title
-    , G._plot_lines_style = fromHLineStyle ls
-    , G._plot_lines_limit_values =
-        [[ (G.LMin, G.LValue y), (G.LMax, G.LValue y) ]]
-    }
+plotHLine a =
+  let title = T.unpack a.config.title
+  in set (G.plot_legend . mapped . _1) title $ mconcat $ do
+       (ls, sy) <- Map.toAscList (mapBack a.points)
+       pure $ G.toPlot $ def
+         { G._plot_lines_title = T.unpack a.config.title
+         , G._plot_lines_style = fromHLineStyle ls
+         , G._plot_lines_limit_values = do
+             y <- toList sy
+             pure [ (G.LMin, G.LValue y)
+                  , (G.LMax, G.LValue y) ]
+         }
 
-plotVLine :: forall x y. VLine x -> G.Plot x y
+plotVLine :: forall x y. AffineSpace x => VLine x -> G.Plot x y
 plotVLine a =
   let title = T.unpack a.config.title
   in set (G.plot_legend . mapped . _1) title $ mconcat $ do
-       (ls, sx) <- Map.toAscList a.info
+       (ls, sx) <- Map.toAscList (mapBack a.points)
        pure $ G.toPlot $ def
          { G._plot_lines_title        = title
          , G._plot_lines_style        = fromVLineStyle ls
-         , G._plot_lines_limit_values =
-              fmap (\x -> [(G.LValue x, G.LMin), (G.LValue x, G.LMax)])
-                   (Set.toAscList sx)
+         , G._plot_lines_limit_values = do
+              x <- toList sx
+              let x' = x .+^ a.config.xoff
+              pure [ (G.LValue x', G.LMin)
+                   , (G.LValue x', G.LMax) ]
          }
 
-plotFill :: forall x y. Fill x y -> G.Plot x y
+plotFill :: forall x y. AffineSpace x => Fill x y -> G.Plot x y
 plotFill a =
   let title = T.unpack a.config.title
   in set (G.plot_legend . mapped . _1) title $ mconcat $ do
-       (s, m) <- Map.toAscList a.info
+       (s, m) <- Map.toAscList a.points
        pure $ G.toPlot $ def
          { G._plot_fillbetween_title  = title
          , G._plot_fillbetween_style  = fromFillStyle s
          , G._plot_fillbetween_values = do
              (x, sys) <- Map.toAscList m
-             ys <- Set.toList sys
-             pure (x, ys)
+             ys <- toList sys
+             let x' = x .+^ a.config.xoff
+             pure (x', (ys.start, ys.end))
          }
 
 plotCandle :: forall x y
@@ -165,9 +176,9 @@ plotCandle :: forall x y
 plotCandle a =
   let title = T.unpack a.config.title
       m1 :: Map Candle.Style [G.Candle x y]
-      m1 = Map.foldrWithKey (\(s, e) (sty, o, h, l, c) ->
-                                Map.insertWith mappend sty [f s e o h l c])
-                            mempty a.info
+      m1 = Map.foldrWithKey (\se (sty, ohlc') ->
+                                Map.insertWith mappend sty [f se ohlc'])
+                            mempty a.points
   in set (G.plot_legend . mapped . _1) title $ mconcat $ do
        (sty, cs) <- Map.toAscList m1
        let (ls, fs) = fromCandleStyle sty
@@ -181,17 +192,18 @@ plotCandle a =
          , G._plot_candle_centre          = 0 -- See note [candle_mid].
          }
   where
-    f :: x -> x -> y -> y -> y -> y -> G.Candle x y
-    f s e o h l c =
-       let !x = s .+^ ((e .-. s) / 2)
-       in G.Candle { G.candle_x     = x
-                   , G.candle_open  = o
-                   , G.candle_high  = h
-                   , G.candle_low   = l
-                   , G.candle_close = c
-                   , G.candle_mid   = c -- Note [candle_mid]: Dummy value. Not
-                                        -- used during rendering if
-                                        -- G._plot_candle_centre is set to 0.
+    f :: Interval x -> OHLC y -> G.Candle x y
+    f se ohlc' =
+       let !x = se.start .+^ ((se.end .-. se.start) / 2)
+       in G.Candle { G.candle_x     = x .+^ a.config.xoff
+                   , G.candle_open  = ohlc'.open
+                   , G.candle_high  = ohlc'.high
+                   , G.candle_low   = ohlc'.low
+                   , G.candle_close = ohlc'.close
+                   , G.candle_mid   = ohlc'.close
+                                      -- Note [candle_mid]: Dummy value. Not
+                                      -- used during rendering if
+                                      -- G._plot_candle_centre is set to 0.
                    }
 
 --------------------------------------------------------------------------------
@@ -246,3 +258,11 @@ fromCandleStyle a =
   , def { G._fill_color  = a.fillColor
         }
   )
+
+-- | Let the values in a 'Map' become its keys, and its keys become its values.
+-- Each @[k]@ is in descending order.  There are no repeated @k@s in the output.
+mapBack :: (Ord v) => Map k v -> Map v [k]
+mapBack = Map.foldlWithKey
+  (\m k v -> Map.insertWith mappend v [k] m)
+  Map.empty
+

@@ -10,7 +10,6 @@ import Graphics.Rendering.Chart.Plot.Types qualified as C
 import Graphics.Rendering.Chart.Axis.Types qualified as G
 
 import Chartfold.Constraint (Entails)
-import Chartfold.Id () -- Brings in orphans
 
 --------------------------------------------------------------------------------
 

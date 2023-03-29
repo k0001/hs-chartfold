@@ -2,145 +2,181 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Chartfold.XChart {--}
- ( XChart(..)
+ ( XChart
+ , pattern XChart
  , update
- , Update(..)
- , initial
- , Err(..)
+ , Update
+ , Config
+ , new
  ) --}
  where
 
 import Data.AffineSpace (AffineSpace(..))
 import Data.Constraint
 import Data.Kind
-import Data.Sequence (Seq)
-import Data.Type.Equality (testEquality)
 import GHC.Show (appPrec, appPrec1)
-import Type.Reflection qualified as TR
 
 import Chartfold.Chart qualified as Chart
 import Chartfold.Constraint (Entails(..), Entails1)
 
 --------------------------------------------------------------------------------
 
+type role XChart nominal nominal representational
 -- | A 'Chart.Chart' whose @y@ has been existentialized.
-data XChart (x :: Type) (c :: Type -> Constraint) where
-  XChart :: c y => Chart.Chart x y -> XChart x c
+data XChart (s :: k) (x :: Type) (c :: Type -> Constraint) where
+  MkXChart :: (c y, Ord y) => Chart.Chart s' x y -> XChart s x c
+  -- ^ Note: It's easier to capture the 'Ord' constraint here than to deal with
+  -- @'Entails1' c 'Ord'@ at usage sites. 'Ord' is fundamentally required by
+  -- 'Chart.update' anyway, so it's OK to have it here.
 
-withXChart
-  :: XChart x c
-  -> (forall y. c y => Chart.Chart x y -> r)
-  -> r -- ^
-withXChart (XChart c) f = f c
+pattern XChart :: () => (c y, Ord y) => Chart.Chart s' x y -> XChart s x c
+pattern XChart a <- MkXChart a
+{-# COMPLETE XChart #-}
 
-instance
-  ( Show (Diff x)
-  , Show x
-  , Entails1 c Show
-  ) => Show (XChart x c) where
-  showsPrec n x =
-    withXChart x $ \(c :: Chart.Chart x y) ->
+instance HasField "config" (XChart s x c) (Config s x) where
+  getField (XChart a) = Config a.config
+  {-# INLINE getField #-}
+
+instance (Eq x, Eq (Diff x)) => Eq (XChart s x c) where
+  l == r = withXCharts l r (==)
+  {-# INLINE (==) #-}
+
+instance (Ord x, Ord (Diff x)) => Ord (XChart s x c) where
+  compare l r = withXCharts l r compare
+  {-# INLINE compare #-}
+  l <= r = withXCharts l r (<=)
+  {-# INLINE (<=) #-}
+
+instance (Show x, Show (Diff x), Entails1 c Show)
+  => Show (XChart s x c) where
+  showsPrec n (XChart (a :: Chart.Chart s' x y)) =
     withDict (entails :: c y :- Show y) $
-      showParen (n > 10) $
-        showString "XChart " .
-        showsPrec 11 c
-
-instance
-  ( Eq (Diff x)
-  , Eq x
-  , Entails1 c Eq
-  , Entails1 c Typeable
-  ) => Eq (XChart x c) where
-  a == b =
-    withXChart a $ \(ca :: Chart.Chart x ya) ->
-    withXChart b $ \(cb :: Chart.Chart x yb) ->
-    withDict (entails :: c ya :- Typeable ya) $
-    withDict (entails :: c yb :- Typeable yb) $
-      let tya = TR.typeRep :: TR.TypeRep ya
-          tyb = TR.typeRep :: TR.TypeRep yb
-      in case testEquality tya tyb of
-           Just Refl -> withDict (entails :: c ya :- Eq ya) $ ca == cb
-           Nothing   -> False
-
-instance
-  ( Show (Diff x)
-  , Show x
-  , Entails1 c Show
-  ) => Show (Update x c) where
-  showsPrec n (Update (u :: Chart.Update x y)) =
-    withDict (entails :: c y :- Show y) $
-    showsPrec n u
-
-instance
-  ( Eq (Diff x)
-  , Eq x
-  , Entails1 c Eq
-  , Entails1 c Typeable
-  ) => Eq (Update x c) where
-  (==) (Update (ua :: Chart.Update x ya))
-       (Update (ub :: Chart.Update x yb)) =
-          withDict (entails :: c ya :- Typeable ya) $
-          withDict (entails :: c yb :- Typeable yb) $
-          case testEquality (TR.typeRep @ya) (TR.typeRep @yb) of
-            Just Refl -> withDict (entails :: c ya :- Eq ya) (ua == ub)
-            Nothing   -> False
-
-deriving anyclass instance
-  ( Typeable (Err x c)
-  , Show (Err x c)
-  ) => Exception (Err x c)
-
-instance (Show x, Entails1 c Show) => Show (Err x c) where
-  showsPrec n = showParen (n > appPrec) . \case
-    Err_UnknownY -> showString "Err_UnknownY"
-    Err_Chart (e :: Chart.Err x y) ->
-      withDict (entails :: c y :- Show y) $
       showParen (n > appPrec) $
-        showString "Err_Chart " .
-        showsPrec appPrec1 e
+        showString "XChart " .
+        showsPrec appPrec1 a
 
-instance
-  ( Eq x
-  , Entails1 c Eq
-  , Entails1 c Typeable
-  ) => Eq (Err x c) where
-  (==) (Err_Chart (ea :: Chart.Err x ya))
-       (Err_Chart (eb :: Chart.Err x yb)) =
-          withDict (entails :: c ya :- Typeable ya) $
-          withDict (entails :: c yb :- Typeable yb) $
-          case testEquality (TR.typeRep @ya) (TR.typeRep @yb) of
-            Just Refl -> withDict (entails :: c ya :- Eq ya) (ea == eb)
-            Nothing   -> False
-  (==) Err_UnknownY Err_UnknownY = True
-  (==) _ _ = False
+-- See 'update_' to understand why this is safe.
+withXCharts
+  :: forall s x c a
+  .  XChart s x c
+  -> XChart s x c
+  -> (forall k (s' :: k) y
+        .  (c y, Ord y)
+        => Chart.Chart s' x y
+        -> Chart.Chart s' x y
+        -> a )
+  -> a
+withXCharts (XChart (l :: Chart.Chart (sl :: slk) x yl))
+            (XChart (r :: Chart.Chart (sr :: srk) x yr))
+  | HRefl <- unsafeCoerce HRefl :: sl :~~: sr
+  , Refl  <- unsafeCoerce Refl  :: yl :~:  yr
+  = \f -> f l r
 
-data Update (x :: Type) (c :: Type -> Constraint) where
-  Update :: c y => Chart.Update x y -> Update x c
+--------------------------------------------------------------------------------
 
-data Err (x :: Type) (c :: Type -> Constraint) where
-  Err_UnknownY :: Err x c
-  Err_Chart :: c y => Chart.Err x y -> Err x c
+type role Update nominal nominal representational
+data Update (s :: k) (x :: Type) (c :: Type -> Constraint) where
+  Update :: (c y, Ord y) => Chart.Update s' x y -> Update s x c
+  -- ^ Note: It's easier to capture the 'Ord' constraint here than to deal with
+  -- @'Entails1' c 'Ord'@ at usage sites. 'Ord' is fundamentally required by
+  -- 'Chart.update' anyway, so it's OK to have it here.
 
-initial :: forall x y c. (Ord x, c y) => Proxy y -> Chart.Config x -> XChart x c
-initial _ = XChart . Chart.initial @x @y
+instance (Eq x) => Eq (Update s x c) where
+  l == r = withUpdates l r (==)
+  {-# INLINE (==) #-}
 
-update
-  :: forall x c
-  .  ( AffineSpace x
-     , Ord x
-     , Entails1 c Ord
-     , Entails1 c Typeable )
-  => x
-  -> Seq (Update x c)
-  -> XChart x c
-  -> Either (Err x c) (XChart x c)
-update x xus (XChart (s :: Chart.Chart x yc)) =
-  withDict (entails :: c yc :- Ord yc) $
-  withDict (entails :: c yc :- Typeable yc) $ do
-    us <- for xus $ \(Update (u :: Chart.Update x yu)) ->
-      withDict (entails :: c yu :- Typeable yu) $
-      case testEquality (TR.typeRep @yc) (TR.typeRep @yu) of
-        Just Refl -> Right u
-        Nothing -> Left Err_UnknownY
-    bimap Err_Chart XChart $ Chart.update x us s
+instance (Ord x) => Ord (Update s x c) where
+  compare l r = withUpdates l r compare
+  {-# INLINE compare #-}
+  l <= r = withUpdates l r (<=)
+  {-# INLINE (<=) #-}
+
+instance (Show x, Show (Diff x), Entails1 c Show)
+  => Show (Update s x c) where
+  showsPrec n (Update (a :: Chart.Update s' x y)) =
+    withDict (entails :: c y :- Show y) $
+      showParen (n > appPrec) $
+        showString "Update " .
+        showsPrec appPrec1 a
+
+-- | Notice that 'Update' is /not/ a 'Monoid' because there's
+-- no way to construct a 'Chart' 'Chart.Update' without knowing @y@.
+instance (Ord x) => Semigroup (Update s x c) where
+  l <> r = withUpdates l r (\l' r' -> Update (l' <> r'))
+  {-# INLINE (<>) #-}
+
+-- See 'update_' to understand why this is safe.
+withUpdates
+  :: forall s x c a
+  .  Update s x c
+  -> Update s x c
+  -> (forall k (s' :: k) y
+        .  (c y, Ord y)
+        => Chart.Update s' x y
+        -> Chart.Update s' x y
+        -> a )
+  -> a
+withUpdates (Update (l :: Chart.Update (sl :: slk) x yl))
+            (Update (r :: Chart.Update (sr :: srk) x yr))
+  | HRefl <- unsafeCoerce HRefl :: sl :~~: sr
+  , Refl  <- unsafeCoerce Refl  :: yl :~:  yr
+  = \f -> f l r
+
+--------------------------------------------------------------------------------
+
+type role Config nominal nominal
+data Config (s :: k) (x :: Type) where
+  Config :: Chart.Config s' x -> Config s x
+
+instance (Eq (Diff x)) => Eq (Config s x) where
+  l == r = withConfigs l r (==)
+  {-# INLINE (==) #-}
+
+instance (Ord (Diff x)) => Ord (Config s x) where
+  compare l r = withConfigs l r compare
+  {-# INLINE compare #-}
+  l <= r = withConfigs l r (<=)
+  {-# INLINE (<=) #-}
+
+instance (Show (Diff x)) => Show (Config s x) where
+  showsPrec n (Config u) = showsPrec n u
+
+-- See 'update_' to understand why this is safe.
+withConfigs
+  :: forall s x a
+  .  Config s x
+  -> Config s x
+  -> (forall k (s' :: k)
+        .  Chart.Config s' x
+        -> Chart.Config s' x
+        -> a )
+  -> a
+withConfigs (Config (l :: Chart.Config (sl :: slk) x))
+            (Config (r :: Chart.Config (sr :: srk) x))
+  | HRefl <- unsafeCoerce HRefl :: sl :~~: sr
+  = \f -> f l r
+
+--------------------------------------------------------------------------------
+
+new
+  :: forall s' x y c a
+  .  (c y, Ord y)
+  => Chart.Chart s' x y
+  -> (forall s
+        .  XChart s x c
+        -> (Chart.Update s' x y -> Update s x c)
+        -> a )
+  -> a
+new c f = f (MkXChart c) Update
+
+-- This function is safe for reasons similar to those in 'Chart.update'.
+-- If the @s@ in 'Update' and 'XChart' agree, then @su ~~ sa@ and @yu ~ ya@.
+-- The @s@ is always an uninstantiated type variable picked by 'new', and
+-- there are no means other than 'new' to construct 'Update's or 'XChart's.
+update :: forall s x c. (Ord x) => Update s x c -> XChart s x c -> XChart s x c
+update (Update (u :: Chart.Update (su :: suk) x yu))
+       (XChart (a :: Chart.Chart  (sa :: sak) x ya))
+  | HRefl <- unsafeCoerce HRefl :: su :~~: sa
+  , Refl  <- unsafeCoerce Refl  :: yu :~:  ya
+  = MkXChart (Chart.update u a)
 
