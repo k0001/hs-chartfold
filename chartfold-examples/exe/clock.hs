@@ -1,8 +1,8 @@
 module Main (main) where
 
 import Control.Concurrent.STM.TMVar
-import Data.Sequence (Seq)
 import Data.Time qualified as Time
+import Data.Time.Clock.POSIX qualified as Time
 import Graphics.Rendering.Chart.Geometry as G
 import Graphics.Rendering.Chart.Backend.Types qualified as G
 import Graphics.Rendering.Chart.Backend.Cairo qualified as GCairo
@@ -10,23 +10,20 @@ import Graphics.Rendering.Chart.Layout qualified as G
 import Graphics.Rendering.Chart.Renderable as G
 import Graphics.UI.Gtk.Gdk.Events qualified as GdkE
 import Graphics.UI.Gtk qualified as Gtk
-import MTLPrelude
 
 import Chartfold.Backend.Chart (plotChart)
 import Chartfold.Chart (Chart)
 import Chartfold.Chart qualified as Chart
-import Chartfold.Line (Config(..))
 import Chartfold.Line qualified as Line
-import Chartfold.HLine (Config(..))
 import Chartfold.HLine qualified as HLine
 
 --------------------------------------------------------------------------------
 
 main :: IO ()
 main = withClockChart $ \cc -> do
-    chartTV :: TVar (Chart s Time.UTCTime Rational) <-
+    chartTV :: TVar (Chart s Time.POSIXTime Rational) <-
       newTVarIO $! cc.initial
-    glayoutTV :: TVar (G.Layout Time.UTCTime Rational) <-
+    glayoutTV :: TVar (G.Layout Time.POSIXTime Rational) <-
       newTVarIO $! plotChart cc.initial
     let tickx :: Time.UTCTime -> STM ()
         tickx x = do
@@ -40,7 +37,7 @@ main = withClockChart $ \cc -> do
           let chart' = Chart.update (cc.ticky y) chart
           writeTVar chartTV $! chart'
           writeTVar glayoutTV $! plotChart chart'
-    pickTMV :: TMVar (G.PickFn (G.LayoutPick Time.UTCTime Rational Rational))
+    pickTMV :: TMVar (G.PickFn (G.LayoutPick Time.POSIXTime Rational Rational))
       <- newEmptyTMVarIO
 
     void $ Gtk.initGUI
@@ -67,7 +64,7 @@ main = withClockChart $ \cc -> do
       t <- Time.getCurrentTime
       atomically $ tickx t
       Gtk.widgetQueueDraw window
-      threadDelay 1_000_000
+      threadDelay 10_000
 
     Gtk.widgetShowAll window
     Gtk.mainGUI
@@ -83,25 +80,26 @@ updateCanvas chart canvas pickTMV = do
   return True
 
 data ClockChart s = ClockChart
-  { tickx   :: Time.UTCTime -> Chart.Update s Time.UTCTime Rational
-  , ticky   :: Rational -> Chart.Update s Time.UTCTime Rational
-  , initial :: Chart.Chart s Time.UTCTime Rational
+  { tickx   :: Time.UTCTime -> Chart.Update s Time.POSIXTime Rational
+  , ticky   :: Rational -> Chart.Update s Time.POSIXTime Rational
+  , initial :: Chart.Chart s Time.POSIXTime Rational
   }
 
 withClockChart :: (forall s. ClockChart s -> a) -> a
 withClockChart f =
   let uline :: forall x y. x -> y -> Line.Update x y
       uline = Line.set Line.styleDefault
-  in Chart.new "Clock" $ do
+  in Chart.configure "Clock" $ do
        fh <- Chart.line $ Line.configDefault "Hour"
        fm <- Chart.line $ Line.configDefault "Minute"
        fs <- Chart.line $ Line.configDefault "Second"
        fy <- Chart.hline $ HLine.configDefault "Mouse Y"
        pure $ \c -> f $ ClockChart
-         { initial = c
+         { initial = Chart.initial c
          , ticky = fy . HLine.set HLine.styleDefault
-         , tickx = \x ->
-           let tod = Time.timeToTimeOfDay (Time.utctDayTime x)
+         , tickx = \t ->
+           let x = Time.utcTimeToPOSIXSeconds t
+               tod = Time.timeToTimeOfDay (Time.utctDayTime t)
            in fh (uline x (toInteger (Time.todHour tod) % 23)) <>
               fm (uline x (toInteger (Time.todMin tod) % 59)) <>
               fs (uline x (min 60 (truncate (Time.todSec tod)) % 60))

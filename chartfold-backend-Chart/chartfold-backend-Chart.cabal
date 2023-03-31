@@ -35,7 +35,9 @@ common basic
     Chart,
     data-default-class,
     lens,
+    parallel,
     text,
+    time,
     vector-space,
   mixins:
     base hiding (Prelude),

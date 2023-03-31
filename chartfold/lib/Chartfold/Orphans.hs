@@ -23,9 +23,17 @@ instance AdditiveGroup Time.NominalDiffTime where
 -- | Orphan.
 instance AffineSpace Time.UTCTime where
   type Diff Time.UTCTime = Time.NominalDiffTime
-  (.-.) = Time.diffUTCTime
+  (.-.) = Time.diffUTCTime     -- Note: This is really slow.
   {-# INLINE (.-.) #-}
-  (.+^) = flip Time.addUTCTime
+  (.+^) = flip Time.addUTCTime -- Note: this is really slow.
+  {-# INLINE (.+^) #-}
+
+-- | Orphan.
+instance AffineSpace Time.NominalDiffTime where
+  type Diff Time.NominalDiffTime = Time.NominalDiffTime
+  (.-.) = (-)
+  {-# INLINE (.-.) #-}
+  (.+^) = (+)
   {-# INLINE (.+^) #-}
 
 -- | Orphan.

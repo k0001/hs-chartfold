@@ -49,6 +49,7 @@ library
     constraints,
     containers,
     lens,
+    parallel,
     text,
     time,
     vector-space,
@@ -64,8 +65,6 @@ library
     Chartfold.Line
     Chartfold.VLine
     Chartfold.XChart
---    Chartfold.XCharts
+    Chartfold.XCharts
   other-modules:
     Chartfold.Orphans
-    -- remove this:
-    Chartfold.Id

@@ -3,11 +3,14 @@
 -- | This module exports orphan instances for third-party libraries.
 module Chartfold.Backend.Chart.Orphans () where
 
-import Graphics.Rendering.Chart.Axis.Types qualified as C
+import Data.Time qualified as Time
+import Data.Time.Clock.POSIX qualified as Time
+
 import Graphics.Rendering.Chart.Axis.Floating ()
+import Graphics.Rendering.Chart.Axis.Time qualified as C
+import Graphics.Rendering.Chart.Axis.Types qualified as C
 import Graphics.Rendering.Chart.Backend.Types qualified as C
 import Graphics.Rendering.Chart.Plot.Types qualified as C
-import Graphics.Rendering.Chart.Axis.Types qualified as G
 
 import Chartfold.Constraint (Entails)
 
@@ -37,6 +40,27 @@ instance C.PlotValue Rational where
             }
 
 -- | Orphan.
+
+instance C.TimeValue Time.NominalDiffTime where
+  utctimeFromTV = Time.posixSecondsToUTCTime
+  {-# INLINE utctimeFromTV #-}
+  tvFromUTCTime = Time.utcTimeToPOSIXSeconds
+  {-# INLINE tvFromUTCTime #-}
+  doubleFromTimeValue = realToFrac
+  {-# INLINE doubleFromTimeValue #-}
+  timeValueFromDouble = fromRational . toRational
+  {-# INLINE timeValueFromDouble #-}
+
+-- | Orphan.
+instance C.PlotValue Time.NominalDiffTime where
+  toValue = C.doubleFromTimeValue
+  {-# INLINE toValue #-}
+  fromValue = C.timeValueFromDouble
+  {-# INLINE fromValue#-}
+  autoAxis = C.autoTimeValueAxis -- NOTE: This is really slow. It converts to UTCTime internally.
+  {-# INLINE autoAxis #-}
+
+-- | Orphan.
 instance Semigroup (C.Plot x y) where
   (<>) = C.joinPlot
   {-# INLINE (<>) #-}
@@ -49,4 +73,6 @@ instance Monoid (C.Plot x y) where
                   }
 
 -- | Orphan.
-instance (G.PlotValue a) => Entails c (G.PlotValue a)
+instance (C.PlotValue a) => Entails c (C.PlotValue a)
+
+

@@ -2,8 +2,7 @@
 {-# OPTIONS_GHC -Wno-simplifiable-class-constraints #-}
 
 module Chartfold.Backend.Chart
-  ( C
-  -- , plotXCharts
+  ( plotXCharts
   , plotXChart
   , plotChart
   , plotLine
@@ -14,14 +13,12 @@ module Chartfold.Backend.Chart
   ) where
 
 import Control.Lens (set, mapped, _1)
+import Control.Parallel.Strategies
 import Data.AffineSpace (AffineSpace(..))
 import Data.Constraint
 import Data.Default.Class (Default(..))
-import Data.IntMap.Strict qualified as IntMap
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-import Data.Set (Set)
-import Data.Set qualified as Set
 import Data.Text qualified as T
 import Graphics.Rendering.Chart.Axis.Types qualified as G
 import Graphics.Rendering.Chart.Backend.Types qualified as G
@@ -36,7 +33,6 @@ import Graphics.Rendering.Chart.Plot.Types qualified as G
 import Chartfold.Candle (Candle)
 import Chartfold.Candle qualified as Candle
 import Chartfold.Chart (Chart)
-import Chartfold.Chart qualified as Chart
 import Chartfold.Constraint (Entails(..), Entails1)
 import Chartfold.Extra (Interval, OHLC)
 import Chartfold.Fill (Fill)
@@ -48,36 +44,26 @@ import Chartfold.Line qualified as Line
 import Chartfold.VLine (VLine)
 import Chartfold.VLine qualified as VLine
 import Chartfold.XChart (XChart, pattern XChart)
--- import Chartfold.XCharts (XCharts(..))
+import Chartfold.XCharts (XCharts)
+import Chartfold.XCharts qualified as XCharts
 
 import Chartfold.Backend.Chart.Orphans ()
 
 --------------------------------------------------------------------------------
 
--- | As a convenience, if you plan to use 'plotXCharts' or 'plotChart',
--- you can use 'C' as the @c@ parameter of @'XCharts' x c@
--- or @'XChart' x c@.
---
--- Otherwise, define your own class, but be sure to create the corresponding
--- 'Entails' instances.
-class (Typeable y, Eq y, Show y, G.PlotValue y) => C y
-instance (Typeable y, Eq y, Show y, G.PlotValue y) => C y
+plotXCharts
+  :: forall s x c
+  .  ( G.PlotValue x
+     , AffineSpace x
+     , Fractional (Diff x)
+     , Entails1 c G.PlotValue )
+  => XCharts s x c
+  -> G.StackedLayouts x
+plotXCharts a = G.StackedLayouts
+  { G._slayouts_layouts = runEval $ XCharts.traverse (rpar . plotXChart) a
+  , G._slayouts_compress_legend = False
+  }
 
---------------------------------------------------------------------------------
-
--- plotXCharts
---   :: forall x c
---   .  ( G.PlotValue x
---      , AffineSpace x
---      , Fractional (Diff x)
---      , Entails1 c G.PlotValue )
---   => XCharts x c
---   -> G.StackedLayouts x
--- plotXCharts a = G.StackedLayouts
---   { G._slayouts_layouts = plotXChart <$> IntMap.elems a.xchart
---   , G._slayouts_compress_legend = False
---   }
---
 plotXChart
   :: forall s x c
   .  ( G.PlotValue x
@@ -92,7 +78,10 @@ plotXChart (XChart (c :: Chart s' x y)) =
 
 plotChart
   :: forall s x y
-  .  (G.PlotValue x, G.PlotValue y, AffineSpace x, Fractional (Diff x))
+  .  ( G.PlotValue x
+     , G.PlotValue y
+     , AffineSpace x
+     , Fractional (Diff x) )
   => Chart s x y
   -> G.Layout x y
 plotChart a = def
@@ -102,11 +91,11 @@ plotChart a = def
       , G._legend_orientation = G.LORows 1
       }
   , G._layout_plots = mconcat
-      [ plotCandle <$> a.candle
-      , plotVLine  <$> a.vline
-      , plotFill   <$> a.fill
-      , plotLine   <$> a.line
-      , plotHLine  <$> a.hline
+      [ map plotCandle a.candle `using` parListSuffixChunks 3
+      , map plotVLine  a.vline  `using` parListSuffixChunks 3
+      , map plotFill   a.fill   `using` parListSuffixChunks 3
+      , map plotLine   a.line   `using` parListSuffixChunks 3
+      , map plotHLine  a.hline  `using` parListSuffixChunks 3
       ]
   }
 
@@ -130,7 +119,7 @@ plotHLine :: forall x y. HLine y -> G.Plot x y
 plotHLine a =
   let title = T.unpack a.config.title
   in set (G.plot_legend . mapped . _1) title $ mconcat $ do
-       (ls, sy) <- Map.toAscList (mapBack a.points)
+       (ls, sy) <- Map.toAscList (backMap a.points)
        pure $ G.toPlot $ def
          { G._plot_lines_title = T.unpack a.config.title
          , G._plot_lines_style = fromHLineStyle ls
@@ -144,7 +133,7 @@ plotVLine :: forall x y. AffineSpace x => VLine x -> G.Plot x y
 plotVLine a =
   let title = T.unpack a.config.title
   in set (G.plot_legend . mapped . _1) title $ mconcat $ do
-       (ls, sx) <- Map.toAscList (mapBack a.points)
+       (ls, sx) <- Map.toAscList (backMap a.points)
        pure $ G.toPlot $ def
          { G._plot_lines_title        = title
          , G._plot_lines_style        = fromVLineStyle ls
@@ -201,9 +190,8 @@ plotCandle a =
                    , G.candle_low   = ohlc'.low
                    , G.candle_close = ohlc'.close
                    , G.candle_mid   = ohlc'.close
-                                      -- Note [candle_mid]: Dummy value. Not
-                                      -- used during rendering if
-                                      -- G._plot_candle_centre is set to 0.
+                     -- Note [candle_mid]: Dummy value. Not used during
+                     -- rendering if G._plot_candle_centre is set to 0.
                    }
 
 --------------------------------------------------------------------------------
@@ -253,16 +241,23 @@ fromCandleStyle :: Candle.Style -> (G.LineStyle, G.FillStyle)
 fromCandleStyle a =
   ( def { G._line_color  = a.lineColor
         , G._line_width  = a.lineWidth
-        , G._line_dashes = a.lineDashes
-        }
-  , def { G._fill_color  = a.fillColor
-        }
+        , G._line_dashes = a.lineDashes }
+  , def { G._fill_color  = a.fillColor }
   )
 
 -- | Let the values in a 'Map' become its keys, and its keys become its values.
 -- Each @[k]@ is in descending order.  There are no repeated @k@s in the output.
-mapBack :: (Ord v) => Map k v -> Map v [k]
-mapBack = Map.foldlWithKey
-  (\m k v -> Map.insertWith mappend v [k] m)
-  Map.empty
+backMap :: (Ord v) => Map k v -> Map v [k]
+backMap = Map.foldlWithKey (\m k v -> Map.insertWith mappend v [k] m) Map.empty
+
+-- | Divides the list into chunks of the specified length. The first chunk
+-- is evaluated sequentially, the rest of the chunks are evaluated in parallel.
+parListSuffixChunks :: Int -> Strategy [a]
+parListSuffixChunks n as = do
+  let (pre0, pos0) = splitAt (n - 1) as
+  pos1 <- case pos0 of
+            [] -> pure []
+            _  -> parListChunk (n - 1) rseq pos0
+  pre1 <- evalList rseq pre0
+  pure (pre1 <> pos1)
 

@@ -29,6 +29,8 @@
                   hself.callPackage ./chartfold-backend-Chart { };
 
                 # External
+                threadscope =
+                  hs.lib.markUnbroken (hs.lib.doJailbreak hsuper.threadscope);
                 Chart = hs.lib.doJailbreak hsuper.Chart;
                 Chart-cairo = hs.lib.doJailbreak hsuper.Chart-cairo;
                 gtk = hsAddPropagatePkgconfigDepends
@@ -86,7 +88,11 @@
               p.chartfold-examples
             ];
             withHoogle = true;
-            nativeBuildInputs = [ pkgs.cabal-install pkgs.cabal2nix ];
+            nativeBuildInputs = [
+              pkgs.cabal-install
+              pkgs.cabal2nix
+              pkgs.haskell.packages.ghc943.threadscope
+            ];
           };
         };
       };
